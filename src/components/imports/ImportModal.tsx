@@ -3,14 +3,14 @@
 import { useState, useCallback } from 'react';
 import { useUploadFile } from '@/hooks/useUploadFile';
 import { usePreview } from '@/hooks/usePreview';
-import { X, Upload, FileText, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
+import { X, Upload, FileText, CheckCircle2, AlertCircle, Loader2, WifiOff } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useDropzone } from 'react-dropzone';
 
 export default function ImportModal({ onClose }: { onClose: () => void }) {
   const [file, setFile] = useState<File | null>(null);
-  const { preview, isLoading: previewLoading } = usePreview(file);
-  const { upload, isLoading: uploadLoading, isSuccess } = useUploadFile();
+  const { preview, isLoading: previewLoading, error: previewError } = usePreview(file);
+  const { upload, isLoading: uploadLoading, isSuccess, error: uploadError } = useUploadFile();
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     if (acceptedFiles.length > 0) {
@@ -77,27 +77,40 @@ export default function ImportModal({ onClose }: { onClose: () => void }) {
               </div>
               <h4 className="text-lg font-bold text-slate-800 mb-2">Arraste sua planilha aqui</h4>
               <p className="text-slate-500 text-sm font-medium mb-8">Suporta CSV, XLSX de até 50MB</p>
-              <button className="btn-primary">Selecionar Arquivo</button>
+              <button className="btn-primary mx-auto">Selecionar Arquivo</button>
             </div>
           ) : (
             <div className="space-y-6">
-              <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-200">
+              <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-200 text-slate-800">
                 <div className="flex items-center gap-4">
                   <div className="w-12 h-12 bg-white rounded-xl shadow-sm border border-slate-100 flex items-center justify-center">
                     <FileText className="w-6 h-6 text-blue-600" />
                   </div>
                   <div>
-                    <h4 className="font-bold text-slate-800 text-sm">{file.name}</h4>
+                    <h4 className="font-bold text-sm truncate max-w-[150px]">{file.name}</h4>
                     <p className="text-[10px] font-bold text-slate-400 capitalize">{(file.size / 1024).toFixed(1)} KB • {file.name.split('.').pop()}</p>
                   </div>
                 </div>
                 <button 
                   onClick={() => setFile(null)} 
-                  className="text-xs font-bold text-rose-500 hover:underline"
+                  className="text-xs font-bold text-rose-500 hover:text-rose-600 hover:underline transition-colors"
                 >
                   Alterar Arquivo
                 </button>
               </div>
+
+              {(previewError || uploadError) && (
+                <div className="p-4 bg-rose-50 border border-rose-100 rounded-xl flex items-start gap-3">
+                  <WifiOff className="w-5 h-5 text-rose-500 mt-0.5" />
+                  <div>
+                    <h5 className="text-sm font-bold text-rose-800">Serviço de Importação Offline 🔌</h5>
+                    <p className="text-xs font-medium text-rose-600 leading-relaxed mt-1">
+                      Não conseguimos conectar ao servidor central. <br />
+                      Certifique-se de que o backend está rodando no terminal.
+                    </p>
+                  </div>
+                </div>
+              )}
 
               {previewLoading ? (
                 <div className="py-12 flex flex-col items-center gap-4">
@@ -152,10 +165,15 @@ export default function ImportModal({ onClose }: { onClose: () => void }) {
           </button>
           <button 
             onClick={handleUpload} 
-            className={`btn-primary shadow-blue-200 shadow-lg min-w-[120px] ${!file || uploadLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
-            disabled={!file || uploadLoading || isSuccess}
+            className={`btn-primary shadow-blue-200 shadow-lg min-w-[160px] ${!file || uploadLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+            disabled={!file || uploadLoading || isSuccess || !!previewError || !!uploadError}
           >
-            {uploadLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Iniciar Importação'}
+            {uploadLoading ? (
+              <>
+                <Loader2 className="w-5 h-5 animate-spin" />
+                <span>Enviando...</span>
+              </>
+            ) : 'Iniciar Importação'}
           </button>
         </div>
       </motion.div>
