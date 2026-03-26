@@ -13,7 +13,9 @@ import {
   RefreshCw,
   Search,
   Filter,
-  Plus
+  Plus,
+  WifiOff,
+  FileText
 } from 'lucide-react';
 import { ptBR } from 'date-fns/locale';
 import { format } from 'date-fns';
@@ -30,11 +32,30 @@ const STATUS_MAP: Record<string, string> = {
 
 export default function Dashboard() {
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
-  const { data: stats, isLoading: statsLoading } = useQuery({
-    queryKey: ['import-stats'],
-    queryFn: () => importsService.list({ limit: 100 }),
-    refetchInterval: 5000,
+  const [isManualRefreshing, setIsManualRefreshing] = useState(false);
+  
+  // States para busca e filtro
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+
+  const { data: stats, isLoading, isError, error, refetch, isFetching } = useQuery({
+    queryKey: ['recent-imports', searchTerm, statusFilter],
+    queryFn: () => importsService.list({ 
+      search: searchTerm || undefined, 
+      status: statusFilter || undefined,
+      limit: 10 
+    }),
+    retry: 1,
+    staleTime: 5000,
   });
+
+  const handleManualRefresh = async () => {
+    setIsManualRefreshing(true);
+    await refetch();
+    setTimeout(() => setIsManualRefreshing(false), 600);
+  };
+
+  const backendOffline = isError && !stats;
 
   const imports = stats?.items || [];
   const counts = {
@@ -49,8 +70,8 @@ export default function Dashboard() {
       {/* Header section */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">Dashboard</h1>
-          <p className="text-slate-500 font-medium">Gerencie e acompanhe suas importações de arquivos em tempo real.</p>
+           <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">Dashboard</h1>
+           <p className="text-slate-500 font-medium tracking-tight">Gerencie e acompanhe suas importações de arquivos em tempo real.</p>
         </div>
         <button 
           onClick={() => setIsImportModalOpen(true)}
@@ -99,35 +120,58 @@ export default function Dashboard() {
               Importações Recentes
               <span className="text-xs font-medium px-2 py-0.5 bg-slate-200 rounded-full">{imports.length}</span>
             </h2>
-            <div className="flex items-center gap-2">
-              <button className="p-2 text-slate-400 hover:text-slate-600 bg-white border border-slate-200 rounded-lg shadow-sm transition-all active:scale-95">
-                <Search className="w-4 h-4" />
-              </button>
-              <button className="p-2 text-slate-400 hover:text-slate-600 bg-white border border-slate-200 rounded-lg shadow-sm transition-all active:scale-95">
-                <Filter className="w-4 h-4" />
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative group">
+                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
+                <input 
+                  type="text" 
+                  placeholder="Pesquisar..." 
+                  className="pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 w-48 shadow-sm transition-all"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </div>
+
+              <div className="relative group">
+                <Filter className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors pointer-events-none" />
+                <select 
+                  className="appearance-none pl-9 pr-8 py-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 shadow-sm transition-all cursor-pointer"
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                >
+                  <option value="">Todos Status</option>
+                  <option value="PENDING">Pendentes</option>
+                  <option value="PROCESSING">Processando</option>
+                  <option value="COMPLETED">Concluídos</option>
+                  <option value="PARTIAL">Sucesso Parcial</option>
+                  <option value="FAILED">Falhas</option>
+                </select>
+              </div>
+
+              <button 
+                onClick={handleManualRefresh}
+                disabled={isManualRefreshing || isFetching}
+                className={`p-2 text-slate-400 hover:text-blue-600 bg-white border border-slate-200 rounded-lg shadow-sm transition-all active:scale-95 ${isManualRefreshing || isFetching ? 'animate-spin text-blue-500' : ''}`}
+                title="Atualizar dados"
+              >
+                <RefreshCw className="w-4 h-4" />
               </button>
             </div>
           </div>
 
           <div className="card">
-            {statsLoading ? (
+            {isLoading && !stats ? (
               <div className="p-12 text-center text-slate-400 flex flex-col items-center gap-4">
                 <RefreshCw className="w-8 h-8 animate-spin" />
-                <p className="font-medium">Carregando importações...</p>
+                <p className="font-medium uppercase text-[10px] tracking-widest">Iniciando Dashboard...</p>
               </div>
             ) : imports.length === 0 ? (
-              <div className="p-16 text-center">
-                <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4 border border-slate-100">
-                  <FileUp className="w-8 h-8 text-slate-300" />
+              <div className="p-20 text-center animate-in fade-in duration-700">
+                <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4 border border-slate-100 shadow-inner">
+                  <FileText className="w-8 h-8 text-slate-300" />
                 </div>
-                <h3 className="text-lg font-bold text-slate-800">Nenhuma importação ainda</h3>
-                <p className="text-slate-500 max-w-xs mx-auto mb-6">Conecte seus dados para começar a automatizar seu fluxo de trabalho.</p>
-                <button 
-                   onClick={() => setIsImportModalOpen(true)}
-                   className="btn-secondary"
-                >
-                  Iniciar primeira importação
-                </button>
+                <h3 className="text-slate-800 font-bold mb-1">Nenhuma importação ainda</h3>
+                <p className="text-slate-500 text-sm max-w-[200px] mx-auto leading-relaxed">Faça seu primeiro upload para começar a ver as estatísticas.</p>
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -212,10 +256,25 @@ export default function Dashboard() {
           <div className="card p-6 border-slate-100">
             <h3 className="text-sm font-bold text-slate-800 mb-4 border-b border-slate-100 pb-2">Resumo Técnico</h3>
             <div className="space-y-4">
-               <SummaryItem label="Status da Fila" value="Online" status="success" />
-               <SummaryItem label="Latência Média" value="124ms" />
-               <SummaryItem label="Versão API" value="v1.0.4" />
-               <SummaryItem label="Heartbeat Worker" value="2m atrás" />
+               <SummaryItem 
+                 label="Status da API" 
+                 value={!stats || isError ? 'Offline' : 'Online'} 
+                 status={!stats || isError ? 'error' : 'success'} 
+               />
+               <SummaryItem 
+                 label="Versão do Sistema" 
+                 value="v1.0.5" 
+               />
+               <SummaryItem 
+                 label="Processamento" 
+                 value={isError ? 'Pausado' : 'Em Espera'} 
+                 status={isError ? 'error' : 'success'}
+               />
+               <SummaryItem 
+                 label="Uptime do UI" 
+                 value="Ativo" 
+                 status="success"
+               />
             </div>
           </div>
         </div>
@@ -257,6 +316,7 @@ function SummaryItem({ label, value, status }: any) {
       <span className="text-xs font-medium text-slate-500">{label}</span>
       <div className="flex items-center gap-1.5">
         {status === 'success' && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>}
+        {status === 'error' && <div className="w-1.5 h-1.5 rounded-full bg-rose-500"></div>}
         <span className="text-xs font-bold text-slate-700">{value}</span>
       </div>
     </div>
