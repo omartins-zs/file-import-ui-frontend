@@ -1,65 +1,264 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { importsService } from '@/lib/api';
+import { 
+  FileUp, 
+  LayoutDashboard, 
+  Clock, 
+  CheckCircle2, 
+  AlertCircle, 
+  ArrowRight,
+  RefreshCw,
+  Search,
+  Filter,
+  Plus
+} from 'lucide-react';
+import { ptBR } from 'date-fns/locale';
+import { format } from 'date-fns';
+import { motion, AnimatePresence } from 'framer-motion';
+import ImportModal from '@/components/imports/ImportModal';
+
+const STATUS_MAP: Record<string, string> = {
+  PENDING: 'Pendente',
+  PROCESSING: 'Processando',
+  COMPLETED: 'Concluído',
+  FAILED: 'Falhou',
+  PARTIAL: 'Parcial',
+}
+
+export default function Dashboard() {
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const { data: stats, isLoading: statsLoading } = useQuery({
+    queryKey: ['import-stats'],
+    queryFn: () => importsService.list({ limit: 100 }),
+    refetchInterval: 5000,
+  });
+
+  const imports = stats?.items || [];
+  const counts = {
+    total: stats?.total || 0,
+    processing: imports.filter((i: any) => i.status === 'PROCESSING' || i.status === 'PENDING').length,
+    completed: imports.filter((i: any) => i.status === 'COMPLETED').length,
+    failed: imports.filter((i: any) => i.status === 'FAILED').length,
+  };
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
+    <div className="space-y-8">
+      {/* Header section */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">Dashboard</h1>
+          <p className="text-slate-500 font-medium">Gerencie e acompanhe suas importações de arquivos em tempo real.</p>
+        </div>
+        <button 
+          onClick={() => setIsImportModalOpen(true)}
+          className="btn-primary"
+        >
+          <Plus className="w-5 h-5" />
+          Nova Importação
+        </button>
+      </div>
+
+      {/* Stats section */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        <StatCard 
+          title="Total de Importações" 
+          value={counts.total} 
+          icon={<LayoutDashboard className="w-6 h-6 text-blue-600" />} 
+          color="blue"
         />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+        <StatCard 
+          title="Em Processamento" 
+          value={counts.processing} 
+          icon={<Clock className="w-6 h-6 text-amber-600" />} 
+          color="amber"
+          pulse={counts.processing > 0}
+        />
+        <StatCard 
+          title="Concluídas" 
+          value={counts.completed} 
+          icon={<CheckCircle2 className="w-6 h-6 text-emerald-600" />} 
+          color="emerald"
+        />
+        <StatCard 
+          title="Falhas" 
+          value={counts.failed} 
+          icon={<AlertCircle className="w-6 h-6 text-rose-600" />} 
+          color="rose"
+        />
+      </div>
+
+      {/* Main content grid */}
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+        {/* Recent Imports List */}
+        <div className="xl:col-span-2 space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+              Importações Recentes
+              <span className="text-xs font-medium px-2 py-0.5 bg-slate-200 rounded-full">{imports.length}</span>
+            </h2>
+            <div className="flex items-center gap-2">
+              <button className="p-2 text-slate-400 hover:text-slate-600 bg-white border border-slate-200 rounded-lg shadow-sm transition-all active:scale-95">
+                <Search className="w-4 h-4" />
+              </button>
+              <button className="p-2 text-slate-400 hover:text-slate-600 bg-white border border-slate-200 rounded-lg shadow-sm transition-all active:scale-95">
+                <Filter className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          <div className="card">
+            {statsLoading ? (
+              <div className="p-12 text-center text-slate-400 flex flex-col items-center gap-4">
+                <RefreshCw className="w-8 h-8 animate-spin" />
+                <p className="font-medium">Carregando importações...</p>
+              </div>
+            ) : imports.length === 0 ? (
+              <div className="p-16 text-center">
+                <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4 border border-slate-100">
+                  <FileUp className="w-8 h-8 text-slate-300" />
+                </div>
+                <h3 className="text-lg font-bold text-slate-800">Nenhuma importação ainda</h3>
+                <p className="text-slate-500 max-w-xs mx-auto mb-6">Conecte seus dados para começar a automatizar seu fluxo de trabalho.</p>
+                <button 
+                   onClick={() => setIsImportModalOpen(true)}
+                   className="btn-secondary"
+                >
+                  Iniciar primeira importação
+                </button>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase text-[10px] font-bold tracking-wider">
+                      <th className="px-6 py-4">Nome do Arquivo</th>
+                      <th className="px-6 py-4">Status</th>
+                      <th className="px-6 py-4">Progresso</th>
+                      <th className="px-6 py-4">Data</th>
+                      <th className="px-6 py-4"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {imports.map((item: any) => (
+                      <tr key={item.id} className="hover:bg-slate-50 transition-colors group">
+                        <td className="px-6 py-5">
+                          <div className="flex items-center gap-3">
+                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-xs ${item.fileType === 'CSV' ? 'bg-indigo-50 text-indigo-600' : 'bg-green-50 text-green-600'} border border-slate-100`}>
+                              {item.fileType}
+                            </div>
+                            <div>
+                                <p className="font-bold text-slate-800 text-sm truncate max-w-[200px]">{item.originalFilename}</p>
+                                <p className="text-[10px] font-bold text-slate-400">ID: ...{item.id.slice(-8)}</p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-5">
+                          <span className={`badge badge-${item.status.toLowerCase()}`}>
+                            {STATUS_MAP[item.status] || item.status}
+                          </span>
+                        </td>
+                        <td className="px-6 py-5">
+                          <div className="w-full max-w-[120px] space-y-1.5">
+                            <div className="flex justify-between text-[10px] font-bold text-slate-500">
+                              <span>{item.progressPercentage}%</span>
+                              <span>{item.successRows}/{item.totalRows || '?'}</span>
+                            </div>
+                            <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden border border-slate-200/50">
+                              <motion.div 
+                                initial={{ width: 0 }}
+                                animate={{ width: `${item.progressPercentage}%` }}
+                                className={`h-full ${item.status === 'FAILED' ? 'bg-rose-500' : 'bg-blue-600 shadow-[0_0_8px_rgba(59,130,246,0.5)]'}`}
+                              />
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-5">
+                          <p className="text-xs font-bold text-slate-600">{format(new Date(item.createdAt), 'dd MMM, HH:mm', { locale: ptBR })}</p>
+                        </td>
+                        <td className="px-6 py-5 text-right">
+                          <a href={`/imports/${item.id}`} className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-600 hover:text-blue-700 hover:underline">
+                            Ver Detalhes
+                            <ArrowRight className="w-3 h-3" />
+                          </a>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+
+        {/* Action Sidebar */}
+        <div className="space-y-6">
+          <div className="card p-6 bg-gradient-to-br from-blue-600 to-indigo-700 text-white border-none shadow-blue-200 shadow-xl relative overflow-hidden group">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 blur-2xl transition-transform group-hover:scale-110"></div>
+            <div className="relative z-10">
+              <h3 className="text-lg font-bold mb-2">Pronto para importar?</h3>
+              <p className="text-blue-100 text-xs font-medium mb-6 leading-relaxed">Processamento rápido, confiável e assíncrono para suas planilhas.</p>
+              <button 
+                onClick={() => setIsImportModalOpen(true)}
+                className="w-full py-2.5 bg-white text-blue-700 rounded-xl font-bold text-sm shadow-sm hover:bg-blue-50 transition-colors active:scale-[0.98]"
+              >
+                Upload de Arquivo
+              </button>
+            </div>
+          </div>
+
+          <div className="card p-6 border-slate-100">
+            <h3 className="text-sm font-bold text-slate-800 mb-4 border-b border-slate-100 pb-2">Resumo Técnico</h3>
+            <div className="space-y-4">
+               <SummaryItem label="Status da Fila" value="Online" status="success" />
+               <SummaryItem label="Latência Média" value="124ms" />
+               <SummaryItem label="Versão API" value="v1.0.4" />
+               <SummaryItem label="Heartbeat Worker" value="2m atrás" />
+            </div>
+          </div>
         </div>
-      </main>
+      </div>
+
+      <AnimatePresence>
+        {isImportModalOpen && (
+          <ImportModal onClose={() => setIsImportModalOpen(false)} />
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+function StatCard({ title, value, icon, color, pulse = false }: any) {
+  const colors: any = {
+    blue: 'border-blue-100 bg-blue-50/30',
+    amber: 'border-amber-100 bg-amber-50/30',
+    emerald: 'border-emerald-100 bg-emerald-50/30',
+    rose: 'border-rose-100 bg-rose-50/30',
+  };
+
+  return (
+    <div className={`card p-6 flex items-start justify-between border-b-4 transition-all hover:translate-y-[-2px] hover:shadow-md ${colors[color]}`}>
+      <div>
+        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">{title}</p>
+        <h4 className="text-2xl font-black text-slate-800">{value}</h4>
+      </div>
+      <div className={`p-3 rounded-2xl bg-white shadow-sm border border-slate-100 ${pulse ? 'animate-pulse' : ''}`}>
+        {icon}
+      </div>
+    </div>
+  );
+}
+
+function SummaryItem({ label, value, status }: any) {
+  return (
+    <div className="flex items-center justify-between">
+      <span className="text-xs font-medium text-slate-500">{label}</span>
+      <div className="flex items-center gap-1.5">
+        {status === 'success' && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>}
+        <span className="text-xs font-bold text-slate-700">{value}</span>
+      </div>
     </div>
   );
 }
